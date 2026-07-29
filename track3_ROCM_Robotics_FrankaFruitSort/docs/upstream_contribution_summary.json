@@ -1,0 +1,17 @@
+{
+  "repo": "huggingface/lerobot",
+  "issue_url": "https://github.com/huggingface/lerobot/issues/4205",
+  "issue_number": 4205,
+  "issue_title": "[ROCm] NotImplementedError for bilinear interpolate on uint8 tensor in SmolVLA resize_with_pad during manual inference",
+  "contribution_type": "issue",
+  "direction": "improve AMD ROCm platform support",
+  "submitted_at": "2026-07-29T13:31:33+08:00",
+  "submitted_at_utc": "2026-07-29T05:31:33Z",
+  "author": "yigenfeng0707-netizen",
+  "state": "OPEN",
+  "evidence_file": "docs/upstream_contribution_evidence.png",
+  "url_evidence_file": "docs/upstream_contribution_url.txt",
+  "draft_file": "docs/upstream_issue_draft.md",
+  "context": "AMD Radeon Hackathon 2026 (Track 3 - Physical AI) - upstream open-source contribution to improve AMD platform support",
+  "related_issues_referenced": [2210, 2218]
+}
