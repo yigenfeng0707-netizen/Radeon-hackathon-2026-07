@@ -283,6 +283,39 @@ The submission code itself is licensed under MIT.
 
 ## Upstream Contribution
 
-As part of this hackathon, we contributed to the open-source community by filing an issue on `huggingface/lerobot` reporting a ROCm-specific bug in uint8 tensor bilinear interpolation:
-- Issue #4205: [ROCm] NotImplementedError for bilinear interpolate on uint8 tensor in SmolVLA resize_with_pad during manual inference
-- URL: https://github.com/huggingface/lerobot/issues/4205
+As part of this hackathon, we contributed to the open-source community by filing an issue on `huggingface/lerobot` reporting a ROCm-specific bug in uint8 tensor bilinear interpolation, **and opened a fix Pull Request**:
+
+- **Issue #4205:** [ROCm] NotImplementedError for bilinear interpolate on uint8 tensor in SmolVLA resize_with_pad during manual inference
+  - URL: https://github.com/huggingface/lerobot/issues/4205
+  - State: OPEN (submitted 2026-07-29)
+- **Pull Request #4324:** Fix uint8 bilinear interpolate NotImplementedError on ROCm
+  - URL: https://github.com/huggingface/lerobot/pull/4324
+  - State: OPEN (submitted 2026-08-04)
+  - Branch: `yigenfeng0707-netizen:fix/rocm-uint8-bilinear-interpolate` → `huggingface:main`
+  - Commit SHA: `bfb3487f3b37d64be44dae62075d40247779b08b`
+  - Closes #4205
+- Fix PR artifacts: `docs/upstream_fix.patch` (unified diff), `docs/upstream_pr_description.md` (PR body)
+- Local runtime shim: `submission/src/utils/rocm_resize_patch.py` (monkey-patches `resize_with_pad` to cast uint8 to float32 before `F.interpolate`, used by the enhanced evaluator `eval_sort_smolvla_robust.py`)
+
+## Enhanced Evaluation
+
+The submission includes an enhanced evaluation script (`submission/src/eval/eval_sort_smolvla_robust.py`) that extends the baseline evaluator with:
+
+- **Multi-episode statistical evaluation** (10+ episodes per configuration)
+- **Pose perturbation testing** (`--perturb 0.02` jitters fruit positions by ±2 cm)
+- **Multi-seed reproducibility** (`--seed 42` controls all RNG sources)
+- **All 3 fruits** (plum, banana, lemon) with configurable subset via `--fruits`
+- **Per-fruit and per-episode breakdown** with aggregate statistics (mean/std/min/max steps)
+- **JSON output** with full provenance metadata for reproducibility
+
+Usage (on remote Radeon Cloud):
+```bash
+cd /workspace/franka_fruit_pick_demo
+.venv/bin/python franka_fruit_pick/eval_sort_smolvla_robust.py \
+    --checkpoint outputs/train/smolvla_lerobot/checkpoints/002000 \
+    --episodes 10 \
+    --perturb 0.02 \
+    --fruits plum banana lemon \
+    --output /tmp/eval_robust_results.json \
+    --save-video /workspace/eval_videos_robust
+```

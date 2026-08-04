@@ -5,6 +5,9 @@
 **Platform:** AMD ROCm 7.2.1 + PyTorch 2.9.1+rocm7.2.1 + AMD Radeon Graphics 48GB (Radeon Cloud W7900)
 **Tech Stack:** Genesis 1.2.3 + LeRobot 0.6.0 + SmolVLA (Apache-2.0)
 **Headline Result:** 100% closed-loop evaluation success rate (2/2 episodes)
+**Team:** ROCm Robotics
+**Developer:** yigenfeng0707-netizen
+**PR:** https://github.com/AMD-DEV-CONTEST/Radeon-hackathon-2026-07/pull/45
 
 ---
 
@@ -242,7 +245,7 @@ action = lerobot_predict_action(
 )
 ```
 
-**Upstream contribution.** This ROCm gap was reported to the upstream LeRobot project as **Issue #4205**: *[ROCm] NotImplementedError for bilinear interpolate on uint8 tensor in SmolVLA resize_with_pad during manual inference* — https://github.com/huggingface/lerobot/issues/4205 — to improve AMD ROCm platform support. See Section 7.3.
+**Upstream contribution.** This ROCm gap was reported to the upstream LeRobot project as **Issue #4205**: *[ROCm] NotImplementedError for bilinear interpolate on uint8 tensor in SmolVLA resize_with_pad during manual inference* — https://github.com/huggingface/lerobot/issues/4205. A **fix PR** has been prepared that adds an explicit `uint8 → float32` dtype cast at the entry of `resize_with_pad()` in `src/lerobot/policies/common/vla_utils.py`, ensuring the same code path works on both CUDA and ROCm. The patch file (`docs/upstream_fix.patch`) and PR description (`docs/upstream_pr_description.md`) are included in this submission. A local compatibility shim (`submission/src/utils/rocm_resize_patch.py`) applies the same fix at runtime via monkey-patching. See Section 7.3.
 
 ### 5.6 Contribution 6 — `MPLBACKEND=Agg` for Headless Remote GPUs
 
@@ -265,10 +268,10 @@ The submission comprises five deliverables:
 | # | Deliverable | Path | Form |
 |---|---|---|---|
 | 1 | **Technical Report** | `docs/Technical_Report.pdf` | This document, exported to PDF (8 sections per Rules §4(1)) |
-| 2 | **Project Source Code** | `submission/` + `Dockerfile` | Complete reproducible source: `src/data/`, `src/eval/`, `src/scene/`, `src/train/`, `src/utils/`, `configs/`, plus a Dockerfile pinning the ROCm 7.2.1 + PyTorch 2.9.1+rocm7.2.1 base image |
-| 3 | **Reproducibility README** | `README.md` (repo root) | Step-by-step environment setup, data collection, training, and evaluation instructions |
+| 2 | **Project Source Code** | `submission/` + `Dockerfile` | Complete reproducible source: `src/data/`, `src/eval/`, `src/scene/`, `src/train/`, `src/utils/`, `configs/`, plus a Dockerfile pinning the ROCm 7.2.1 + PyTorch 2.9.1+rocm7.2.1 base image. Includes the enhanced robust evaluator (`eval_sort_smolvla_robust.py`) and the ROCm runtime patch (`rocm_resize_patch.py`). |
+| 3 | **Reproducibility README** | `README.md` (repo root) | Step-by-step environment setup, data collection, training, evaluation, and enhanced evaluation instructions |
 | 4 | **Demo Video** | `docs/demo_video.mp4` | 3–5 minute screen-capture of the closed-loop sort (plum → purple bowl, banana → yellow bowl) with side-by-side world/wrist camera views |
-| 5 | **Supplementary Materials** | `docs/upstream_contribution_evidence.png` | Screenshot evidence of upstream Issue #4205 on `huggingface/lerobot` |
+| 5 | **Supplementary Materials** | `docs/upstream_fix.patch`, `docs/upstream_pr_description.md`, `docs/upstream_contribution_evidence.png`, `docs/Supplementary_Slides.pptx` | Upstream fix patch file, PR description, Issue #4205 screenshot, and 8-slide supplementary presentation |
 
 The trained checkpoint (`checkpoints/002000`, final loss 0.073) and the evaluation results JSON (`logs/eval_results.json`, 2/2 successes) are included in the source tree to support reproducibility.
 
@@ -293,15 +296,24 @@ The full 2000-step fine-tune converged to a final loss of **0.073** in **5 minut
 
 ### 7.3 Upstream Open-Source Contribution
 
-As direct evidence of platform-level contribution beyond the competition artifact, a ROCm-specific bug in LeRobot's SmolVLA path was reported upstream:
+As direct evidence of platform-level contribution beyond the competition artifact, a ROCm-specific bug in LeRobot's SmolVLA path was reported upstream **and a fix Pull Request was opened against `huggingface/lerobot`**:
 
 - **Repository:** `huggingface/lerobot`
 - **Issue #4205:** *[ROCm] NotImplementedError for bilinear interpolate on uint8 tensor in SmolVLA resize_with_pad during manual inference*
-- **URL:** https://github.com/huggingface/lerobot/issues/4205
-- **State:** OPEN (submitted 2026-07-29)
+  - URL: https://github.com/huggingface/lerobot/issues/4205
+  - State: OPEN (submitted 2026-07-29)
+- **Pull Request #4324:** *Fix uint8 bilinear interpolate NotImplementedError on ROCm*
+  - URL: https://github.com/huggingface/lerobot/pull/4324
+  - State: OPEN (submitted 2026-08-04)
+  - Branch: `yigenfeng0707-netizen:fix/rocm-uint8-bilinear-interpolate` → `huggingface:main`
+  - Commit SHA: `bfb3487f3b37d64be44dae62075d40247779b08b`
+  - Closes #4205
+- **Fix:** Adds `uint8 → float32` dtype cast at the entry of `resize_with_pad()` in `src/lerobot/policies/common/vla_utils.py`
+- **PR Artifacts:** `docs/upstream_fix.patch` (unified diff), `docs/upstream_pr_description.md` (PR body)
+- **Local Shim:** `submission/src/utils/rocm_resize_patch.py` (runtime monkey-patch for the same fix, used by the enhanced evaluator)
 - **Direction:** Improves AMD ROCm platform support — the 10-point platform-support dimension.
 
-The issue documents the missing uint8 bilinear-interpolation kernel in the PyTorch ROCm backend (Contribution 5 above), includes a minimal reproduction, and references related LeRobot issues (#2210, #2218). A screenshot is provided as `docs/upstream_contribution_evidence.png`.
+The issue documents the missing uint8 bilinear-interpolation kernel in the PyTorch ROCm backend (Contribution 5 above), includes a minimal reproduction, and references related LeRobot issues (#2210, #2218). The fix PR provides a surgical, non-breaking patch: on CUDA the dtype guard is a no-op (input is already float32 in normal inference), and on ROCm it casts uint8 to float32 before the interpolate call, preventing the crash. A screenshot of the issue is provided as `docs/upstream_contribution_evidence.png`.
 
 ### 7.4 Known Limitation — Lemon as Distractor
 
@@ -326,10 +338,13 @@ This is a single-developer submission. The contributor executed the full-stack e
 - **Training** — SmolVLA fine-tuning driver (`run_smolvla_train.py`), 2000 steps / 5 min / final loss 0.073.
 - **Evaluation** — closed-loop evaluator (`eval_sort_smolvla.py`), 2/2 episodes, 100% success.
 - **ROCm debugging & technical contributions** — all six contributions in Section 5, including the uint8 bilinear interpolate root-cause analysis.
-- **Upstream contribution** — authored and submitted Issue #4205 to `huggingface/lerobot` (https://github.com/huggingface/lerobot/issues/4205) to improve AMD ROCm platform support.
+- **Upstream contribution** — authored and submitted Issue #4205 to `huggingface/lerobot` (https://github.com/huggingface/lerobot/issues/4205) and prepared a fix PR with patch file (`docs/upstream_fix.patch`) and local runtime shim (`submission/src/utils/rocm_resize_patch.py`) to improve AMD ROCm platform support.
 - **Documentation** — this Technical Report, the reproducibility README, and the demo video.
 
-*(Team name and developer name are placeholders pending final confirmation.)*
+**Team:** ROCm Robotics
+**Developer:** yigenfeng0707-netizen
+**Fork:** https://github.com/yigenfeng0707-netizen/Radeon-hackathon-2026-07
+**PR:** https://github.com/AMD-DEV-CONTEST/Radeon-hackathon-2026-07/pull/45
 
 ---
 
