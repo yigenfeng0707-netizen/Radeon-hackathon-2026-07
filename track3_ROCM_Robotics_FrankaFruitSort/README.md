@@ -260,6 +260,7 @@ Compare your `eval_results.json` against the reference in `logs/eval_results.jso
 ├── docs/
 │   ├── eval_robust_protocol.json      # Planned 12-episode evaluation schema
 │   ├── eval_robust_results.json       # Placeholder — filled by evaluator on real run
+│   ├── eval_robust_run_2026-08-05.json # Archived real verification run (5/36, non-headline)
 │   └── eval_robust_extrapolation.json # Archived pre-run projection (not a measurement)
 └── screenshots/sort_demo/     # Demo video source materials
 ```
@@ -277,7 +278,7 @@ Measured on Radeon Pro W7900 (ROCm 7.2.1, PyTorch 2.9.1+rocm7.2.1). Source: [`lo
 | Fruits sorted | plum ✓, banana ✓ (lemon acts as distractor — see Technical Report §7.4) |
 | Checkpoint | `002000` |
 
-The 12-episode robustness matrix (±2 cm pose perturbation across all 3 fruits) is defined as a reproducible protocol in [`docs/eval_robust_protocol.json`](./docs/eval_robust_protocol.json). Any empirical numbers produced by running that protocol are written to `docs/eval_robust_results.json` by the evaluator itself.
+The 12-episode robustness matrix (±2 cm pose perturbation across all 3 fruits) is defined as a reproducible protocol in [`docs/eval_robust_protocol.json`](./docs/eval_robust_protocol.json). A real execution of that protocol (2026-08-05, Radeon 48GB Cloud, 36 trials) is archived in [`docs/eval_robust_run_2026-08-05.json`](./docs/eval_robust_run_2026-08-05.json) as non-headline context (5/36; dataset limited to plum-only episodes). Any subsequent empirical numbers produced by running the protocol are written to `docs/eval_robust_results.json` by the evaluator itself.
 
 ## License
 
@@ -328,4 +329,4 @@ python submission/src/eval/eval_sort_smolvla_robust.py \
     --save-video screenshots/eval_robust
 ```
 
-**Data integrity note.** The **only** closed-loop success rate produced by an actually executed evaluation is `logs/eval_results.json` (2/2 = 100%). The reproducible schema for the 12-episode run is defined in `docs/eval_robust_protocol.json`; when the run is executed, the evaluator writes real measurements into `docs/eval_robust_results.json`. A design-time pre-run projection is retained for transparency in `docs/eval_robust_extrapolation.json` and is explicitly marked `not_a_measurement`.
+**Data integrity note.** The **headline** closed-loop success rate is `logs/eval_results.json` (2/2 = 100%), produced by an actually executed evaluation on Radeon Pro W7900 (ROCm 7.2.1). On 2026-08-05 we also executed the full 12-episode × 3-fruit protocol on a Radeon 48GB Cloud instance (ROCm 7.2, PyTorch 2.9.1): 36 trials yielded 5/36 = 13.9% (plum 5/12, banana 0/12, lemon 0/12). Because that run's training set contained only plum episodes, it is archived for transparency as **non-headline** context in `docs/eval_robust_run_2026-08-05.json` (see also Technical Report §7.1.1 "Evaluator verification run"). The reproducible schema is defined in `docs/eval_robust_protocol.json`; the evaluator writes real measurements into `docs/eval_robust_results.json`. A design-time pre-run projection is retained for transparency in `docs/eval_robust_extrapolation.json` and is explicitly marked `not_a_measurement`.

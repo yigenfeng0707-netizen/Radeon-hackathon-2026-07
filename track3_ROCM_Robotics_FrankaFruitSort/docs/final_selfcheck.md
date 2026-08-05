@@ -37,6 +37,16 @@ Ensured strict separation of measured vs. planned vs. archived-projection data:
 - ✅ `README.md` Results & Enhanced Evaluation sections updated to match.
 - ✅ `docs/submission_final_state.json` updated with `documentation_integrity_pass` audit trail.
 
+## Phase 2 verification run (COMPLETED, 2026-08-05)
+
+Real 12-episode × 3-fruit execution on a Radeon Cloud instance (`u-13944-c577fd88`, Radeon 48GB, ROCm 7.2, PyTorch 2.9.1+gitff65f5b):
+
+- Pipeline: record (981s, 5/9 attempts committed — plum only) → train (2000 steps, 364s, final loss 0.064) → eval (978s, 36 trials).
+- Result: **5/36 = 13.9%** — plum 5/12 (mean 217 steps), banana 0/12, lemon 0/12; 0 episodes fully successful.
+- Root cause: training set contained only plum episodes; banana/lemon generalization was not learnable from that dataset.
+- Decision (user-confirmed plan A): archived as **non-headline transparency artifact** in `docs/eval_robust_run_2026-08-05.json`; headline remains baseline 2/2 = 100%.
+- Documented in Technical Report §7.1.1 "Evaluator verification run", README, and `submission_final_state.json`.
+
 ## Upstream contribution (bonus points)
 
 - ✅ Issue #4205 (2026-07-29, OPEN): https://github.com/huggingface/lerobot/issues/4205
@@ -56,17 +66,10 @@ Ensured strict separation of measured vs. planned vs. archived-projection data:
 - `Dockerfile` `FROM rocm/pytorch:latest` — intentionally unpinned because the README §1.2 provisioning steps assume the Radeon Cloud base image already provides the pinned ROCm 7.2.1 + PyTorch 2.9.1 stack.
 - Baseline `logs/eval_results.json` — canonical, do not touch.
 
-## Optional Phase 2 (blocked on human action)
+## Phase 2 status (historical)
 
-The 12-episode enhanced evaluation on ModelScope DSW (Radeon RX 7900 GRE / ROCm 5.7 / dsw-2076885) is prepared but blocked by Aliyun MAAS OAuth. To unblock:
-
-1. Follow `scripts/DSW_COOKIE_GUIDE.md` to extract a browser session cookie into `scripts/jupyter_cookie.txt`.
-2. Run `python scripts/jupyter_api_exec.py` to verify connectivity.
-3. Install `genesis-world` + `lerobot`, upload `submission/` + checkpoint, run `eval_sort_smolvla_robust.py --episodes 12 --perturb 0.02 --seed 42`.
-4. The evaluator writes real measurements into `docs/eval_robust_results.json`; regenerate Technical_Report.pdf to reflect real numbers.
-
-Without Phase 2 the submission still passes on documented integrity: baseline 2/2 = 100% + reproducible planned protocol + upstream fix PR merged into hackathon narrative.
+The original plan was to run the 12-episode enhanced evaluation on ModelScope DSW (`dsw-2076885`, Radeon RX 7900 GRE / ROCm 5.7), blocked by Aliyun MAAS OAuth. That route was superseded by a working Radeon Cloud instance (see Phase 2 verification run above); the DSW route is abandoned and its helper scripts remain archived in `scripts/`.
 
 ## Recommended next action
 
-Push the current documentation-integrity pass to the fork so PR #45 auto-updates. See `P3-4` in the todo list.
+Push the Phase 2 wrap-up (README, submission_final_state, selfcheck, Technical_Report.md + regenerated PDF) to the fork so PR #45 auto-updates. See P3-4 in the todo list.
