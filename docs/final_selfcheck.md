@@ -60,6 +60,18 @@ Multi-fruit dataset iteration addressing Phase 2 limitations:
 - **Headline remains:** Baseline 2/2 = 100% in `logs/eval_results.json`.
 - Documented in Technical Report §7.1.1 and README Results section.
 
+## v2 Training Iteration (COMPLETED, 2026-08-05)
+
+Extended training iteration attempting to improve performance:
+
+- **Dataset:** 29 episodes (15 plum, 10 banana, 4 lemon), 10113 frames, merged from 4 recording sessions.
+- **Training:** 32000 steps, final loss 0.016, ~90 minutes on W7900.
+- **Result:** **0/18 = 0.0%** — plum 0/6 (0.0%), banana 0/6 (0.0%), lemon N/A.
+- **Finding:** Severe overfitting — additional banana data and extended training degraded performance from 25% to 0%.
+- **Root cause:** Distribution shift from banana_v2 data collection patterns; overfitting to specific training trajectories.
+- **Decision:** v11 checkpoint (25% overall) remains the best performing model; v2 training documented as failed experiment.
+- Documented in Technical Report §7.1.2 and README Results section.
+
 ## Upstream contribution (bonus points)
 
 - ✅ Issue #4205 (2026-07-29, OPEN): https://github.com/huggingface/lerobot/issues/4205
