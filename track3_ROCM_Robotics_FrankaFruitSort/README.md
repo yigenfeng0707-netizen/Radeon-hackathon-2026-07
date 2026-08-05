@@ -63,9 +63,8 @@ cd /workspace
 # Official starter repository (provides Genesis scene + Franka control modules)
 git clone https://github.com/wangxunx/franka_fruit_pick_demo.git
 
-# This project's submission
-# (Replace <your-fork> with your GitHub fork URL)
-git clone https://github.com/<your-fork>/Radeon-hackathon-2026-07.git amd-submission
+# This project's submission (Track 3 fork)
+git clone https://github.com/yigenfeng0707-netizen/Radeon-hackathon-2026-07.git amd-submission
 ```
 
 ---
@@ -256,21 +255,29 @@ Compare your `eval_results.json` against the reference in `logs/eval_results.jso
 │   ├── demo_video.mp4         # 3-5 minute demo video
 │   └── upstream_contribution_evidence.png  # Open-source contribution proof
 ├── logs/                      # Reference training logs & eval results
-│   ├── smolvla_train.log
-│   └── eval_results.json
+│   ├── smolvla_train.log      # Full 2000-step fine-tune trace
+│   └── eval_results.json      # Baseline 2/2 closed-loop measurement (canonical)
+├── docs/
+│   ├── eval_robust_protocol.json      # Planned 12-episode evaluation schema
+│   ├── eval_robust_results.json       # Placeholder — filled by evaluator on real run
+│   └── eval_robust_extrapolation.json # Archived pre-run projection (not a measurement)
 └── screenshots/sort_demo/     # Demo video source materials
 ```
 
 ## Results
 
+Measured on Radeon Pro W7900 (ROCm 7.2.1, PyTorch 2.9.1+rocm7.2.1). Source: [`logs/eval_results.json`](./logs/eval_results.json) and [`logs/smolvla_train.log`](./logs/smolvla_train.log).
+
 | Metric | Value |
 |--------|-------|
-| Closed-loop success rate | **100% (2/2 episodes)** |
+| Closed-loop success rate (baseline) | **100% (2/2 episodes)** |
 | Training steps | 2000 |
 | Final training loss | 0.073 |
 | Training wall-clock | ~5 minutes (W7900) |
-| Fruits sorted | plum ✓, banana ✓ (lemon acts as distractor) |
+| Fruits sorted | plum ✓, banana ✓ (lemon acts as distractor — see Technical Report §7.4) |
 | Checkpoint | `002000` |
+
+The 12-episode robustness matrix (±2 cm pose perturbation across all 3 fruits) is defined as a reproducible protocol in [`docs/eval_robust_protocol.json`](./docs/eval_robust_protocol.json). Any empirical numbers produced by running that protocol are written to `docs/eval_robust_results.json` by the evaluator itself.
 
 ## License
 
@@ -297,25 +304,28 @@ As part of this hackathon, we contributed to the open-source community by filing
 - Fix PR artifacts: `docs/upstream_fix.patch` (unified diff), `docs/upstream_pr_description.md` (PR body)
 - Local runtime shim: `submission/src/utils/rocm_resize_patch.py` (monkey-patches `resize_with_pad` to cast uint8 to float32 before `F.interpolate`, used by the enhanced evaluator `eval_sort_smolvla_robust.py`)
 
-## Enhanced Evaluation
+## Enhanced Evaluation (Planned Protocol)
 
-The submission includes an enhanced evaluation script (`submission/src/eval/eval_sort_smolvla_robust.py`) that extends the baseline evaluator with:
+The submission ships an **enhanced evaluator** — `submission/src/eval/eval_sort_smolvla_robust.py` — engineered for statistical robustness testing beyond the 2/2 baseline. The **script is complete and reproducible**; the 12-episode empirical run is documented as a planned protocol rather than as pre-collected results.
 
-- **Multi-episode statistical evaluation** (10+ episodes per configuration)
-- **Pose perturbation testing** (`--perturb 0.02` jitters fruit positions by ±2 cm)
-- **Multi-seed reproducibility** (`--seed 42` controls all RNG sources)
-- **All 3 fruits** (plum, banana, lemon) with configurable subset via `--fruits`
-- **Per-fruit and per-episode breakdown** with aggregate statistics (mean/std/min/max steps)
-- **JSON output** with full provenance metadata for reproducibility
+Features implemented in the script:
 
-Usage (on remote Radeon Cloud):
+- Multi-episode statistical evaluation (`--episodes N`)
+- Pose perturbation (`--perturb 0.02` — uniform ±2 cm on the fruit's initial `(x, y)`)
+- Multi-seed reproducibility (`--seed 42` — controls `numpy`, `torch`, Python `random`, and Genesis RNG)
+- All 3 fruits (`--fruits plum banana lemon`) with configurable subset
+- Per-fruit and per-episode breakdown with aggregate statistics (mean / std / min / max / median steps)
+- JSON output with full provenance metadata
+
+**Reproduction command:**
+
 ```bash
-cd /workspace/franka_fruit_pick_demo
-.venv/bin/python franka_fruit_pick/eval_sort_smolvla_robust.py \
+python submission/src/eval/eval_sort_smolvla_robust.py \
     --checkpoint outputs/train/smolvla_lerobot/checkpoints/002000 \
-    --episodes 10 \
-    --perturb 0.02 \
+    --episodes 12 --perturb 0.02 --seed 42 \
     --fruits plum banana lemon \
-    --output /tmp/eval_robust_results.json \
-    --save-video /workspace/eval_videos_robust
+    --output docs/eval_robust_results.json \
+    --save-video screenshots/eval_robust
 ```
+
+**Data integrity note.** The **only** closed-loop success rate produced by an actually executed evaluation is `logs/eval_results.json` (2/2 = 100%). The reproducible schema for the 12-episode run is defined in `docs/eval_robust_protocol.json`; when the run is executed, the evaluator writes real measurements into `docs/eval_robust_results.json`. A design-time pre-run projection is retained for transparency in `docs/eval_robust_extrapolation.json` and is explicitly marked `not_a_measurement`.

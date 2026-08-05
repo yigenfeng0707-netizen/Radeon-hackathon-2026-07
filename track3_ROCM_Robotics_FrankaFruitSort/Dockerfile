@@ -30,12 +30,11 @@ RUN python -m playwright install chromium --with-deps
 # Clone the starter repository (provides build_scene, grasp_demo, paths modules)
 RUN git clone https://github.com/wangxunx/franka_fruit_pick_demo.git /workspace/franka_fruit_pick_demo
 
-# Copy project source code
+# Copy project source code (configs live under submission/configs/)
 COPY submission/ /workspace/submission/
-COPY configs/ /workspace/configs/
 
-# Set Python path to include starter repo modules
-ENV PYTHONPATH=/workspace:/workspace/franka_fruit_pick_demo:/workspace/franka_fruit_pick_demo/franka_fruit_pick:$PYTHONPATH
+# Set Python path to include starter repo modules and submission configs
+ENV PYTHONPATH=/workspace:/workspace/submission:/workspace/franka_fruit_pick_demo:/workspace/franka_fruit_pick_demo/franka_fruit_pick:$PYTHONPATH
 
 # Default entrypoint
 CMD ["bash"]
