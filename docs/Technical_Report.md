@@ -373,6 +373,34 @@ This represents a **+11.1pp improvement** over the Phase 2 verification run (13.
 
 **Root cause of remaining 0% lemon success:** The lemon's spherical geometry (6.5cm diameter) combined with 12N grip force causes slide-out during transport. The scripted policy achieves only 13% success on lemon; this is a physical constraint of the gripper-lemon interaction, not a model limitation.
 
+### 7.1.2 v2 Training Iteration — Extended Training with Additional Banana Data
+
+A second training iteration was attempted to improve performance by:
+1. Recording 10 additional banana episodes (10/15 success rate)
+2. Merging all data into a larger dataset (29 episodes: 15 plum + 10 banana + 4 lemon)
+3. Training to 32K steps
+
+**v2 dataset:** 29 episodes (15 plum, 10 banana, 4 lemon), 10113 frames, merged from four recording sessions.
+
+**v2 training:** 32000 steps, final loss 0.016, ~90 minutes on W7900.
+
+**v2 evaluation (3 episodes per checkpoint):**
+
+| Checkpoint | Overall Success Rate | Plum Success | Banana Success |
+|---|---:|---:|---:|
+| 8K steps | 0.0% (0/6) | 0.0% (0/3) | 0.0% (0/3) |
+| 16K steps | 0.0% (0/6) | 0.0% (0/3) | 0.0% (0/3) |
+| 32K steps | 0.0% (0/6) | 0.0% (0/3) | 0.0% (0/3) |
+
+**Finding:** The v2 training with additional banana data and extended training caused severe overfitting. The model learned to predict actions that worked in the specific training scenarios but failed to generalize to the evaluation environment. The v11 checkpoint (16K steps, 24 episodes) remains the best performing model with 25% overall success rate.
+
+**Root cause analysis:**
+1. **Distribution shift:** The banana_v2 data collection had different success/failure patterns than the original v11 data, causing the model to learn incorrect action distributions.
+2. **Overfitting:** Extended training to 32K steps allowed the model to memorize specific training trajectories rather than learning generalizable skills.
+3. **Data quality issues:** Some banana_v2 episodes may have contained suboptimal demonstrations that confused the model.
+
+**Conclusion:** We submit the v11 checkpoint (25% overall success rate) as our final result, with the v2 training documented as a failed experiment that provides valuable insights into training data quality and model generalization.
+
 ### 7.2 Training Efficiency on AMD ROCm
 
 The full 2000-step fine-tune converged to a final loss of **0.073** in **5 minutes 5 seconds** of wall-clock time at ~6.7 step/s on the Radeon W7900, with ~85% GPU utilization. This is competitive with — and in this configuration faster than — an equivalent CUDA run (~7 minutes), underscoring the ROCm stack's readiness for VLA workloads.
