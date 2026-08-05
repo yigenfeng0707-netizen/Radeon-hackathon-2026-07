@@ -34,8 +34,13 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 import grasp_demo as _gd
 from build_scene import build_scene
 from grasp_demo import (
-    TaskSpec, run_pick_place, check_success,
-    _goto_interp, _topdown_quat, GRIPPER_OPEN, _ik,
+    TaskSpec,
+    run_pick_place,
+    check_success,
+    _goto_interp,
+    _topdown_quat,
+    GRIPPER_OPEN,
+    _ik,
     GraspProfile,
 )
 from paths import DATASETS_DIR
@@ -50,6 +55,8 @@ from sort_scene_config import (
 # --- Grasp profile overrides (see sort_demo.py for rationale) -------------
 _OVERRIDE_PROFILES = {
     "018_plum": GraspProfile(yaw_offset=0.0, close_force=-35.0, center_align=True),
+    "011_banana": GraspProfile(yaw_offset=-35.0, close_force=-50.0, center_align=True),
+    "014_lemon": GraspProfile(yaw_offset=0.0, close_force=-60.0, center_align=True),
 }
 for _name, _prof in _OVERRIDE_PROFILES.items():
     _gd.GRASP_PROFILES[_name] = _prof
@@ -59,16 +66,36 @@ for _name, _prof in _OVERRIDE_PROFILES.items():
 _orig_goto_plan = _gd._goto_plan
 
 
-def _goto_plan_with_retry(bundle, pos, quat, *, finger, num_waypoints=150, settle=20, recorder=None, max_attempts=10):
+def _goto_plan_with_retry(
+    bundle,
+    pos,
+    quat,
+    *,
+    finger,
+    num_waypoints=150,
+    settle=20,
+    recorder=None,
+    max_attempts=3,
+):
     last_qpos = None
+    dist = float("inf")
     for attempt in range(max_attempts):
         qpos = _orig_goto_plan(
-            bundle, pos, quat,
-            finger=finger, num_waypoints=num_waypoints, settle=settle, recorder=recorder,
+            bundle,
+            pos,
+            quat,
+            finger=finger,
+            num_waypoints=num_waypoints,
+            settle=settle,
+            recorder=recorder,
         )
         hand = bundle.franka.get_link("hand")
         cur = hand.get_pos().cpu().numpy().reshape(-1)
         dist = float(np.linalg.norm(cur - np.asarray(pos)))
+        print(
+            f"    [plan attempt {attempt + 1}/{max_attempts}] target={np.asarray(pos).tolist()} hand={cur.tolist()} dist={dist:.4f}",
+            flush=True,
+        )
         if dist < 0.05:
             return qpos
         last_qpos = qpos
@@ -76,19 +103,50 @@ def _goto_plan_with_retry(bundle, pos, quat, *, finger, num_waypoints=150, settl
             bundle.franka.control_dofs_position(last_qpos)
             bundle.scene.step()
             bundle.update_wrist_cam()
+
+    # RRTConnect failed after all retries -- fall back to _goto_interp (IK
+    # interpolation). Safe for approach/descend phases where gripper is empty
+    # and both start/end are at or above table level. See sort_demo.py for
+    # full rationale.
+    print(
+        f"    [plan FAILED after {max_attempts} attempts, falling back to _goto_interp] dist={dist:.4f}",
+        flush=True,
+    )
+    _gd._goto_interp(
+        bundle,
+        pos,
+        quat,
+        finger_cmd=finger,
+        recorder=recorder,
+    )
+    hand = bundle.franka.get_link("hand")
+    cur = hand.get_pos().cpu().numpy().reshape(-1)
+    final_dist = float(np.linalg.norm(cur - np.asarray(pos)))
+    print(
+        f"    [interp fallback done] dist={final_dist:.4f}",
+        flush=True,
+    )
     return last_qpos
 
 
 _gd._goto_plan = _goto_plan_with_retry
 
 
-# --- _descend_vertical override (see sort_demo.py for rationale) ----------
-def _descend_via_plan(bundle, xy, z_from, z_to, quat, *, finger, steps=80, settle=15, recorder=None):
-    grasp_pos = np.array([xy[0], xy[1], z_to])
-    _gd._goto_plan(bundle, grasp_pos, quat, finger=finger, recorder=recorder)
+# --- _descend_vertical: keep original step-wise z descent (v9) ----------
+# v7-v8 replaced _descend_vertical with _goto_interp. But v8 diagnostic showed
+# _goto_interp causes lateral drift during descent, pushing fruits off the
+# grasp axis. v9 reverts to the original step-wise z descent (re-solve IK each
+# step, keeping the hand on a vertical line).
+#
+# Additionally, patch GRASP_CENTER_DROP_FRAC from 0.45 to 1.0 so fingertips
+# reach the bottom of the fruit for a proper cupping grip.
+_gd.GRASP_CENTER_DROP_FRAC = 1.0
+_gd.PALM_CLEARANCE = 0.01
 
+# v10: import the run_pick_place override from sort_demo (applied there)
+from sort_demo import _run_pick_place_v10, _settle_grasp  # noqa: E402
 
-_gd._descend_vertical = _descend_via_plan
+_gd.run_pick_place = _run_pick_place_v10
 
 
 # Home pose between picks (mirrors sort_demo._go_home) -- see comment there.
@@ -102,19 +160,30 @@ def _go_home(bundle, recorder=None) -> None:
     # Use _goto_interp (joint-space interpolation). RRTConnect from the post-pick
     # retreat pose to home fails (yaw + lateral move crosses IK branches; verified:
     # 4 retries all failed). _goto_interp is safe because both poses are high above
-    # the table (no collision) and the next descend uses _goto_plan (_descend_via_plan),
-    # so the home pose's IK branch doesn't matter (see sort_demo._go_home rationale).
+    # the table (no collision) and the next descend uses _goto_interp
+    # (_descend_via_interp), so the home pose's IK branch doesn't matter
+    # (see sort_demo._go_home rationale).
     _gd._goto_interp(
-        bundle, home_pos, home_quat,
-        finger_cmd=GRIPPER_OPEN, recorder=recorder,
+        bundle,
+        home_pos,
+        home_quat,
+        finger_cmd=GRIPPER_OPEN,
+        recorder=recorder,
     )
+
 
 CONTROL_FPS = 100  # sim dt = 0.01
 
 JOINT_NAMES = [
-    "panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4",
-    "panda_joint5", "panda_joint6", "panda_joint7",
-    "panda_finger_joint1", "panda_finger_joint2",
+    "panda_joint1",
+    "panda_joint2",
+    "panda_joint3",
+    "panda_joint4",
+    "panda_joint5",
+    "panda_joint6",
+    "panda_joint7",
+    "panda_finger_joint1",
+    "panda_finger_joint2",
 ]
 
 
@@ -126,7 +195,14 @@ class SortRecorder:
     label as the scripted policy moves to the next fruit.
     """
 
-    def __init__(self, bundle, *, fps: int, img_wh: tuple[int, int], control_fps: int = CONTROL_FPS):
+    def __init__(
+        self,
+        bundle,
+        *,
+        fps: int,
+        img_wh: tuple[int, int],
+        control_fps: int = CONTROL_FPS,
+    ):
         self.bundle = bundle
         self.fps = fps
         self.img_w, self.img_h = img_wh
@@ -157,7 +233,9 @@ class SortRecorder:
     def _resize(self, img) -> np.ndarray:
         img = self._to_np(img)
         if (img.shape[1], img.shape[0]) != (self.img_w, self.img_h):
-            img = cv2.resize(img, (self.img_w, self.img_h), interpolation=cv2.INTER_AREA)
+            img = cv2.resize(
+                img, (self.img_w, self.img_h), interpolation=cv2.INTER_AREA
+            )
         return np.ascontiguousarray(img, dtype=np.uint8)
 
     def on_step(self, action) -> None:
@@ -166,7 +244,9 @@ class SortRecorder:
             return
         self._accum -= self.steps_per_frame
 
-        state = self._to_np(self.bundle.franka.get_qpos()).reshape(-1).astype(np.float32)
+        state = (
+            self._to_np(self.bundle.franka.get_qpos()).reshape(-1).astype(np.float32)
+        )
         action = self._to_np(action).reshape(-1).astype(np.float32)
         world = self._resize(self.bundle.world_cam.render(rgb=True)[0])
         wrist = self._resize(self.bundle.wrist_cam.render(rgb=True)[0])
@@ -196,7 +276,11 @@ class SortRecorder:
 def build_features(img_wh: tuple[int, int]) -> dict:
     w, h = img_wh
     vec = {"dtype": "float32", "shape": (len(JOINT_NAMES),), "names": JOINT_NAMES}
-    img = {"dtype": "video", "shape": (h, w, 3), "names": ["height", "width", "channel"]}
+    img = {
+        "dtype": "video",
+        "shape": (h, w, 3),
+        "names": ["height", "width", "channel"],
+    }
     return {
         "observation.state": dict(vec),
         "action": dict(vec),
@@ -205,7 +289,9 @@ def build_features(img_wh: tuple[int, int]) -> dict:
     }
 
 
-def run_sort_episode_per_fruit(bundle, dataset, *, fps: int, img_wh: tuple[int, int]) -> int:
+def run_sort_episode_per_fruit(
+    bundle, dataset, *, fps: int, img_wh: tuple[int, int]
+) -> int:
     """Run one scripted sort attempt. Commit each successful fruit as its own
     LeRobot episode (so a failed fruit doesn't waste the successful one's frames).
 
@@ -232,28 +318,102 @@ def run_sort_episode_per_fruit(bundle, dataset, *, fps: int, img_wh: tuple[int, 
             success_tol=0.06,
         )
         try:
-            success, _ = run_pick_place(bundle, task, save_frames=False, recorder=recorder)
+            # Debug: log fruit position before pick
+            fruit_entity = bundle.ycb[fruit]
+            fruit_pos_before = fruit_entity.get_pos().cpu().numpy().reshape(-1)
+            print(
+                f"    [DEBUG {fruit}] before pick: pos={fruit_pos_before.tolist()}",
+                flush=True,
+            )
+
+            success, _ = run_pick_place(
+                bundle, task, save_frames=False, recorder=recorder
+            )
         except Exception as e:
             print(f"  [{fruit} error] {e}")
             success = False
+
+        # Debug: log fruit position after pick-and-place + check_success details
+        fruit_entity = bundle.ycb[fruit]
+        fruit_pos_after = fruit_entity.get_pos().cpu().numpy().reshape(-1)
+        container_entity = bundle.ycb[container]
+        container_pos = container_entity.get_pos().cpu().numpy().reshape(-1)
+        print(
+            f"    [DEBUG {fruit}] after pick: fruit_pos={fruit_pos_after.tolist()} "
+            f"container_pos={container_pos.tolist()} ok={success}",
+            flush=True,
+        )
+        if not success:
+            # Log check_success details
+            try:
+                from grasp_demo import _resolve_place, _entity_aabb, _BOWL_RIM_MARGIN
+
+                place_xy, place_ref_z, place_ent = _resolve_place(
+                    bundle, task.place_target
+                )
+                horizontal = float(np.linalg.norm(fruit_pos_after[:2] - place_xy))
+                if place_ent is not None:
+                    bowl_aabb = _entity_aabb(place_ent)
+                    rim_z = float(bowl_aabb[1, 2])
+                    rim_radius = 0.5 * float(
+                        min(
+                            bowl_aabb[1, 0] - bowl_aabb[0, 0],
+                            bowl_aabb[1, 1] - bowl_aabb[0, 1],
+                        )
+                    )
+                    obj_bottom_z = float(_entity_aabb(fruit_entity)[0, 2])
+                    within = horizontal < min(task.success_tol, rim_radius)
+                    inside = obj_bottom_z < rim_z - _BOWL_RIM_MARGIN
+                    print(
+                        f"    [DEBUG {fruit}] check_success: horizontal={horizontal:.4f} "
+                        f"rim_z={rim_z:.4f} rim_radius={rim_radius:.4f} "
+                        f"obj_bottom_z={obj_bottom_z:.4f} within={within} inside={inside}",
+                        flush=True,
+                    )
+            except Exception as e:
+                print(f"    [DEBUG {fruit}] check_success debug error: {e}", flush=True)
         if success and len(recorder) > 0:
             recorder.flush_to(dataset)
             committed += 1
             print(f"  [{fruit} OK] sub-episode committed ({len(recorder)} frames)")
         else:
-            print(f"  [{fruit} skip] not committed (ok={success}, frames={len(recorder)})")
+            print(
+                f"  [{fruit} skip] not committed (ok={success}, frames={len(recorder)})"
+            )
     return committed
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Record scripted sort episodes into a LeRobotDataset.")
-    parser.add_argument("-c", "--cpu", action="store_true", default=False, help="Force CPU sim.")
-    parser.add_argument("--episodes", type=int, default=10, help="Target successful episodes to record.")
-    parser.add_argument("--max-attempts", type=int, default=30, help="Max total attempts before giving up.")
-    parser.add_argument("--fps", type=int, default=30, help="Dataset fps (decimated from 100 Hz sim).")
-    parser.add_argument("--img-wh", type=int, nargs=2, default=[224, 224], help="Image width height.")
-    parser.add_argument("--dataset-name", type=str, default="sort_fruit", help="Dataset name (under datasets/).")
-    parser.add_argument("--repo-id", type=str, default="local/sort_fruit", help="LeRobot repo id.")
+    parser = argparse.ArgumentParser(
+        description="Record scripted sort episodes into a LeRobotDataset."
+    )
+    parser.add_argument(
+        "-c", "--cpu", action="store_true", default=False, help="Force CPU sim."
+    )
+    parser.add_argument(
+        "--episodes", type=int, default=10, help="Target successful episodes to record."
+    )
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=30,
+        help="Max total attempts before giving up.",
+    )
+    parser.add_argument(
+        "--fps", type=int, default=30, help="Dataset fps (decimated from 100 Hz sim)."
+    )
+    parser.add_argument(
+        "--img-wh", type=int, nargs=2, default=[224, 224], help="Image width height."
+    )
+    parser.add_argument(
+        "--dataset-name",
+        type=str,
+        default="sort_fruit",
+        help="Dataset name (under datasets/).",
+    )
+    parser.add_argument(
+        "--repo-id", type=str, default="local/sort_fruit", help="LeRobot repo id."
+    )
     args = parser.parse_args()
 
     img_wh = tuple(args.img_wh)
@@ -277,7 +437,9 @@ def main() -> None:
     attempts = 0
     while successful < args.episodes and attempts < args.max_attempts:
         attempts += 1
-        print(f"\n=== Attempt {attempts} (committed so far: {successful}/{args.episodes}) ===")
+        print(
+            f"\n=== Attempt {attempts} (committed so far: {successful}/{args.episodes}) ==="
+        )
 
         # Fresh scene per attempt (Genesis scenes are not cheap to reset
         # in-place; rebuilding guarantees a clean physics state for each episode).
@@ -285,7 +447,10 @@ def main() -> None:
 
         try:
             committed = run_sort_episode_per_fruit(
-                bundle, dataset, fps=args.fps, img_wh=img_wh,
+                bundle,
+                dataset,
+                fps=args.fps,
+                img_wh=img_wh,
             )
         except Exception as e:
             print(f"  [episode error] {e}")

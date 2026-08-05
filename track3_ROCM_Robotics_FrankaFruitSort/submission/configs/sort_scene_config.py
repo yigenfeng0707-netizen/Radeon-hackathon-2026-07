@@ -23,28 +23,28 @@ CONTAINER_MESH_ALIAS = "024_bowl"
 # appearance prior of its target fruit category, so a color-conditioned policy
 # has a clean visual cue to learn from.
 CONTAINER_COLORS = {
-    "024_bowl_yellow": (1.0, 0.85, 0.10, 1.0),   # banana -> yellow bowl
-    "024_bowl_green":  (0.20, 0.70, 0.25, 1.0),  # lemon  -> green bowl
+    "024_bowl_yellow": (1.0, 0.85, 0.10, 1.0),  # banana -> yellow bowl
+    "024_bowl_green": (0.20, 0.70, 0.25, 1.0),  # lemon  -> green bowl
     "024_bowl_purple": (0.55, 0.20, 0.65, 1.0),  # plum   -> purple bowl
 }
 
-# Pick zone (x=0.30) and place zone (x=0.50). Three y-rows (0.20 / 0.05 / -0.20).
-# The middle lane is offset to y=0.05 (not 0.00) because the Franka base sits at
-# y=0.00: a pick target directly in front of the base yields an IK solution
-# whose approach sweeps laterally and clips the fruit off the table (verified:
-# lemon at y=0.00 was launched to (0.97, 0.00, 0.03) -- off the table). y=0.05
-# moves the target just off the base axis so the arm approaches from a clean
-# top-down pose.
+# Pick zone (x=0.30) and place zone (x=0.50). Three y-rows (0.20 / 0.10 / -0.20).
+# The middle lane is at y=0.10 (not 0.00) because the Franka base sits at
+# y=0.00: a pick target directly on the base axis yields an IK solution near
+# a kinematic singularity, causing RRTConnect to fail (verified: lemon at
+# y=0.00 was launched off the table; y=0.05 still caused RRTConnect planning
+# failures due to singularity-adjacent ill-conditioned IK). y=0.10 gives
+# sufficient clearance from the base axis for reliable top-down planning.
 PICK_X = 0.30
 PLACE_X = 0.50
-LANE_Y = (0.20, 0.05, -0.20)
+LANE_Y = (0.20, 0.10, -0.20)
 
 # Object -> container mapping. This is the "ground truth" sorting rule the
 # scripted policy follows; the learned policy must discover it from pixels.
 SORT_MAPPING = {
     "011_banana": "024_bowl_yellow",
-    "014_lemon":  "024_bowl_green",
-    "018_plum":   "024_bowl_purple",
+    "014_lemon": "024_bowl_green",
+    "018_plum": "024_bowl_purple",
 }
 
 # Lane assignment per fruit (which y-row the fruit starts on). Aligned with its
@@ -52,8 +52,8 @@ SORT_MAPPING = {
 # swing), making the scripted policy maximally reliable for data collection.
 LANE_ASSIGNMENT = {
     "011_banana": LANE_Y[0],
-    "014_lemon":  LANE_Y[1],
-    "018_plum":   LANE_Y[2],
+    "014_lemon": LANE_Y[1],
+    "018_plum": LANE_Y[2],
 }
 
 # Per-item layout passed to build_scene(layout=...). Each entry matches the
@@ -71,7 +71,7 @@ for _fruit, _lane_y in LANE_ASSIGNMENT.items():
 for _container, _color in CONTAINER_COLORS.items():
     _lane_y = {
         "024_bowl_yellow": LANE_Y[0],
-        "024_bowl_green":  LANE_Y[1],
+        "024_bowl_green": LANE_Y[1],
         "024_bowl_purple": LANE_Y[2],
     }[_container]
     SORT_LAYOUT[_container] = {
@@ -85,13 +85,13 @@ def sort_task_description(fruit: str) -> str:
     """Natural-language task string for the LeRobot dataset."""
     name = {
         "011_banana": "banana",
-        "014_lemon":  "lemon",
-        "018_plum":   "plum",
+        "014_lemon": "lemon",
+        "018_plum": "plum",
     }.get(fruit, fruit)
     target = {
         "011_banana": "yellow bowl",
-        "014_lemon":  "green bowl",
-        "018_plum":   "purple bowl",
+        "014_lemon": "green bowl",
+        "018_plum": "purple bowl",
     }.get(fruit, "bowl")
     return f"sort the {name} into the {target}"
 
@@ -99,9 +99,9 @@ def sort_task_description(fruit: str) -> str:
 def pick_order() -> list[str]:
     """Order in which fruits are picked in a scripted episode.
 
-    MVP: plum then banana. Lemon is left in the scene as a distractor because
-    its approach (small ellipsoid near the Franka base axis y=0) currently
-    clips the fruit off the table -- a known limitation noted in the report.
-    Re-enable lemon once a yaw-offset grasp profile is tuned for it.
+    All three fruits are enabled. The lemon approach was previously blocked
+    because its y=0.05 position (now y=0.10) sat too close to the Franka
+    base axis, causing RRTConnect failures due to IK singularity. With y=0.10
+    and a dedicated grasp profile override, lemon picking is now reliable.
     """
-    return ["018_plum", "011_banana"]
+    return ["018_plum", "011_banana", "014_lemon"]
