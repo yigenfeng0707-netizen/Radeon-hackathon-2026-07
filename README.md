@@ -301,7 +301,30 @@ An engineering iteration addressing the Phase 2 verification run's limitations (
 4. **Camera coordinate system correction** — `camera1/camera2` → `world/wrist` renaming to match LeRobot's dual-camera convention.
 5. **SmolVLA `torch_compilable_check` patch** — Workaround for missing symbol in transformers 4.57.6.
 
-**Root cause of remaining 0% lemon success:** The lemon's spherical geometry (6.5cm diameter) combined with 12N grip force causes slide-out during transport. The scripted policy achieves only 13% success on lemon; this is a physical constraint of the gripper-lemon interaction, not a model limitation.
+**Root cause of remaining 0% lemon success:** The lemon's spherical geometry (6.5cm diameter) with 12N grip force causes slide-out during transport. The scripted policy achieves only 13% success on lemon; this is a physical constraint of the gripper-lemon interaction, not a model limitation.
+
+### v2 Training Iteration (2026-08-05)
+
+An additional training iteration was attempted to improve performance by:
+1. Recording 10 additional banana episodes (10/15 success rate)
+2. Merging all data into a larger dataset (29 episodes: 15 plum + 10 banana + 4 lemon)
+3. Training to 32K steps
+
+| Metric | v11 Iteration | v2 Iteration |
+|--------|---------------|--------------|
+| Dataset | 24 episodes (13 plum, 7 banana, 4 lemon) | 29 episodes (15 plum, 10 banana, 4 lemon) |
+| Training steps | 16000 | 32000 |
+| Final loss | 0.021 | 0.016 |
+| **Overall success rate** | **25.0% (9/36)** | **0.0% (0/18)** |
+| Plum success | 66.7% (8/12) | 0.0% (0/6) |
+| Banana success | 8.3% (1/12) | 0.0% (0/6) |
+| Lemon success | 0.0% (0/12) | N/A |
+
+**Finding:** The v2 training with additional banana data and extended training caused severe overfitting. The model learned to predict actions that worked in the specific training scenarios but failed to generalize to the evaluation environment. The v11 checkpoint (16K steps, 24 episodes) remains the best performing model.
+
+**Root cause:** The banana_v2 data collection had different success/failure patterns than the original v11 data, causing distribution shift. The model optimized for the new banana data at the expense of plum performance, ultimately learning incorrect action patterns for all fruits.
+
+**Conclusion:** We submit the v11 checkpoint (25% overall success rate) as our final result, with the v2 training documented as a failed experiment that provides valuable insights into training data quality and model generalization.
 
 ## License
 
